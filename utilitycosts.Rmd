@@ -1,0 +1,981 @@
+---
+title: "Untitled"
+output: html_document
+date: "2024-03-14"
+---
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(readxl)
+library(ExcelFunctionsR)
+library(lubridate)
+library(tidycensus)
+library(sf)
+library(mapview)
+library(RColorBrewer)
+```
+
+```{r}
+#data pulled from: https://www.eia.gov/electricity/data/eia861m/ -- each year downloaded seperately from Sales & Revenue tab, then names cleaned in Excel before importing herecosts2013 <- read_excel("data/f8262013.xls") %>% clean_names()
+
+costs2013 <- read_excel("data/f8262013.xls") %>% clean_names()
+costs2013$res_rev_thousands <- as.numeric(costs2013$res_rev_thousands)
+costs2013$res_sales_megawatthours <- as.numeric(costs2013$res_sales_megawatthours)
+costs2013$res_customers <- as.numeric(costs2013$res_customers)
+costs2013$commercial_rev <- as.numeric(costs2013$commercial_rev)
+costs2013$commercial_sales <- as.numeric(costs2013$commercial_sales)
+costs2013$commercial_customers <- as.numeric(costs2013$commercial_customers)
+costs2013$ind_rev <- as.numeric(costs2013$ind_rev)
+costs2013$ind_sales <- as.numeric(costs2013$ind_sales)
+
+costs2014 <- read_excel("data/f8262014.xls") %>% clean_names()
+costs2014$transpo_rev <- as.numeric(costs2014$transpo_rev)
+costs2014$transpo_sales <- as.numeric(costs2014$transpo_sales)
+costs2014$transpo_customers <- as.numeric(costs2014$transpo_customers)
+
+costs2015 <- read_excel("data/f8262015.xls") %>% clean_names()
+costs2015$ind_rev <- as.numeric(costs2015$ind_rev)
+costs2015$ind_sales <- as.numeric(costs2015$ind_sales)
+costs2015$ind_customers <- as.numeric(costs2015$ind_customers)
+
+costs2016 <- read_excel("data/f8262016.xls") %>% clean_names()
+
+costs2017 <- read_excel("data/retail_sales_2017.xlsx") %>% clean_names()
+
+costs2018 <- read_excel("data/retail_sales_2018.xlsx") %>% clean_names()
+costs2018$commercial_customers <- as.numeric(costs2018$commercial_customers)
+costs2018$ind_rev <- as.numeric(costs2018$ind_rev)
+costs2018$ind_sales <- as.numeric(costs2018$ind_sales)
+costs2018$ind_customers <- as.numeric(costs2018$ind_customers)
+costs2018$transpo_rev <- as.numeric(costs2018$transpo_rev)
+costs2018$transpo_sales <- as.numeric(costs2018$transpo_sales)
+costs2018$transpo_customers <- as.numeric(costs2018$transpo_customers)
+
+costs2019 <- read_excel("data/retail_sales_2019.xlsx") %>% clean_names()
+costs2019$transpo_sales <- as.numeric(costs2019$transpo_sales)
+costs2019$transpo_customers <- as.numeric(costs2019$transpo_customers)
+
+costs2020 <- read_excel("data/retail_sales_2020.xlsx") %>% clean_names()
+costs2020$res_rev_thousands <- as.numeric(costs2020$res_rev_thousands)
+costs2020$res_sales_megawatthours <- as.numeric(costs2020$res_sales_megawatthours)
+costs2020$res_customers <- as.numeric(costs2020$res_customers)
+costs2020$commercial_rev <- as.numeric(costs2020$commercial_rev)
+costs2020$commercial_sales <- as.numeric(costs2020$commercial_sales)
+costs2020$commercial_customers <- as.numeric(costs2020$commercial_customers)
+costs2020$ind_rev <- as.numeric(costs2020$ind_rev)
+costs2020$ind_sales <- as.numeric(costs2020$ind_sales)
+costs2020$ind_customers <- as.numeric(costs2020$ind_customers)
+costs2020$transpo_rev <- as.numeric(costs2020$transpo_rev)
+costs2020$transpo_sales <- as.numeric(costs2020$transpo_sales)
+costs2020$transpo_customers <- as.numeric(costs2020$transpo_customers)
+
+costs2021 <- read_excel("data/sales_ult_cust_2021.xlsx") %>% clean_names()
+costs2021$ind_sales <- as.numeric(costs2021$ind_sales)
+
+costs2022 <- read_excel("data/sales_ult_cust_2022.xlsx") %>% clean_names()
+costs2022$res_rev_thousands <- as.numeric(costs2022$res_rev_thousands)
+costs2022$res_sales_megawatthours <- as.numeric(costs2022$res_sales_megawatthours)
+costs2022$res_customers <- as.numeric(costs2022$res_customers)
+costs2022$ind_rev <- as.numeric(costs2022$ind_rev)
+costs2022$ind_sales <- as.numeric(costs2022$ind_sales)
+
+costs2023 <- read_excel("data/sales_ult_cust_2023.xlsx") %>% clean_names()
+
+#bind
+costs <- bind_rows(costs2013, costs2014, costs2015, costs2016, costs2017, costs2018, costs2019, costs2020, costs2021, costs2022, costs2023)
+
+rm(costs2013, costs2014, costs2015, costs2016, costs2017, costs2018, costs2019, costs2020, costs2021, costs2022, costs2023)
+```
+
+#QUESTIONS FOR ANALYSIS
+1. Which FL companies had the highest average cost for residential bills over the years?
+2. How do Floriday utilties expenses compare to other states?
+3. How have per-customer costs changed over the year?
+4. What is the average bill for Floridians? What is the average bill for each company? How has that changed in recent years?
+5. How does the average bill compare to other states?
+
+```{r}
+
+#figure out how much each customer pays in cents per KW -- match to this page: https://www.eia.gov/electricity/monthly/epm_table_grapher.php?t=table_5_06_a
+
+
+#each customer uses an average of xxx KWh
+#each customer pays an average total of $xxxx
+
+costs %>% 
+  filter(state == "FL" & month == 12 & year == 2022) %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(dollars_per_customer = (res_rev_thousands*1000)/res_customers,
+         MWH_per_customer = res_sales_megawatthours/res_customers, #per month
+         dollars_per_MWH = dollars_per_customer/MWH_per_customer)
+
+#this makes it seem like the average customer in FL is spending $134.26 per megawatthour each month
+#this seems pretty correct
+
+#Try this another way? Try to convert to KWH and cents because that's how the annual reports have it
+
+costs %>% 
+  filter(state == "FL" & month == 12 & year == 2023) %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer)
+
+#"State total" utility matches online report, so this seems like a reliable way of calculating cost per customer
+        
+      
+```
+
+```{r}
+#which state had the highest overall costs at the end of last year?
+costs %>% 
+  filter(month == 12 & year == 2023 & utility_number == 88888) %>% 
+  select(year, month, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  arrange(desc(cents_per_KWH))
+
+#Hawaii is the highest by a good margin. Florida is around the 20th spot. (It is really not close to Alaska, but maybe an individual power company is)
+```
+
+#Note: overall cents per kwh might not translate to companies' actual bills. They do charge a certain amount of cents per kwh, plus all their different fees. The figure we're working with here is what that would all add up to per unit of energy used.
+
+
+```{r}
+#from 2020 to 2021, what is the price jump for Florida on average?
+costs %>% 
+  filter(month == 12 & state == "FL" & utility_number == "88888") %>% 
+  select(year, month, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  select(year, state, cents_per_KWH) %>% 
+  pivot_wider(names_from = year,
+              values_from = cents_per_KWH) %>% 
+  mutate(`2014-12-1` = ((`2014`-`2013`)/`2013`)*100, #annual % increase -- field name = last date of period
+         `2015-12-1` = ((`2015`-`2014`)/`2014`)*100,
+         `2016-12-1` = ((`2016`-`2015`)/`2015`)*100,
+         `2017-12-1` = ((`2017`-`2016`)/`2016`)*100,
+         `2018-12-1` = ((`2018`-`2017`)/`2017`)*100,
+         `2019-12-1` = ((`2019`-`2018`)/`2018`)*100,
+         `2020-12-1` = ((`2020`-`2019`)/`2019`)*100,
+         `2021-12-1` = ((`2021`-`2020`)/`2020`)*100,
+         `2022-12-1` = ((`2022`-`2021`)/`2021`)*100,
+         `2023-12-1` = ((`2023`-`2022`)/`2022`)*100)
+
+```
+
+```{r}
+#do this in another way but look at July. I want to see if the percent change is comparable
+
+costs %>% 
+  filter(month == 7 & state == "FL" & utility_number == "88888") %>% 
+  select(year, month, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  select(year, state, cents_per_KWH) %>% 
+  pivot_wider(names_from = year,
+              values_from = cents_per_KWH) %>% 
+  mutate(`2014-12-1` = ((`2014`-`2013`)/`2013`)*100, #annual % increase -- field name = last date of period
+         `2015-12-1` = ((`2015`-`2014`)/`2014`)*100,
+         `2016-12-1` = ((`2016`-`2015`)/`2015`)*100,
+         `2017-12-1` = ((`2017`-`2016`)/`2016`)*100,
+         `2018-12-1` = ((`2018`-`2017`)/`2017`)*100,
+         `2019-12-1` = ((`2019`-`2018`)/`2018`)*100,
+         `2020-12-1` = ((`2020`-`2019`)/`2019`)*100,
+         `2021-12-1` = ((`2021`-`2020`)/`2020`)*100,
+         `2022-12-1` = ((`2022`-`2021`)/`2021`)*100,
+         `2023-12-1` = ((`2023`-`2022`)/`2022`)*100)
+
+#2020-2021 jump is a bit lower here (surprising) but otherwise pretty close
+```
+
+
+```{r}
+#which state had the highest year-to-year growth? Use December as common point
+
+costs %>% 
+  filter(month == 12 & utility_number == 88888) %>% 
+  filter(state != "US") %>% 
+  select(year, month, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  select(year, state, cents_per_KWH) %>% 
+  pivot_wider(names_from = year, values_from = cents_per_KWH) %>% 
+  mutate(pct_change_decade = ((`2023`-`2013`)/`2013`)*100,
+         pct_change_5years = ((`2023`-`2018`)/`2018`)*100,
+         pct_change_3years = ((`2023`-`2020`)/`2020`)*100,
+         pct_change_lastyear = ((`2023`-`2022`)/`2022`)*100) %>% 
+  arrange(desc(pct_change_decade))
+
+#Florida doesn't really stand out nationwide -- how does it compare to the Southeast?
+
+costs %>% 
+  filter(month == 12, grepl("Total", utility_name)) %>% 
+  filter(state == "FL" | state == "DE" | state == "DC" | state == "GA" | state == "MD" | state == "NC" | state == "SC" | state == "VA" | state == "WV") %>% #south atlantic category determined by EIA 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  select(year, state, cents_per_KWH) %>% 
+  pivot_wider(names_from = year, values_from = cents_per_KWH) %>% 
+  mutate(pct_change_decade = ((`2023`-`2013`)/`2013`)*100,
+         pct_change_5years = ((`2023`-`2018`)/`2018`)*100,
+         pct_change_3years = ((`2023`-`2020`)/`2020`)*100,
+         pct_change_lastyear = ((`2023`-`2022`)/`2022`)*100) %>% 
+  arrange(desc(pct_change_3years))
+
+#FL had the 3rd highest increase in its region in the last decade and last 3 years -- not sure how interesting that is
+```
+
+```{r}
+#Which FL companies have the highest cost and what are the gaps?
+
+costs$utility_name <- gsub("Duke Energy Florida, Inc", "Duke Energy Florida", costs$utility_name)
+costs$utility_name <- gsub("Duke Energy Florida, LLC", "Duke Energy Florida", costs$utility_name)
+
+costs %>% 
+  filter(month == 12, state == "FL") %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  select(year, utility_name, cents_per_KWH) %>%  
+  pivot_wider(names_from = year, values_from = cents_per_KWH) %>% 
+  filter(!grepl("Adjustment", utility_name), !grepl("Total", utility_name)) %>% 
+  mutate(pct_pandemic = ((`2020`-`2019`)/`2019`)*100, #how much did companies drop their prices during crisis?
+         pct_change_5years = ((`2023`-`2018`)/`2018`)*100,
+         pct_change_2years = ((`2023`-`2021`)/`2022`)*100, #from when prices started rising again to now
+         pct_change_lastyear = ((`2023`-`2022`)/`2022`)*100) %>% 
+  select(utility_name, pct_pandemic, pct_change_5years, pct_change_2years, pct_change_lastyear) %>% 
+  arrange(desc(pct_change_2years))
+
+#TECO has had the greatest change in the last 3 years, by A LOT. Up 65% since 2020. Sunnova had the greatest increase from 2022 to 2023 -- but I've never heard of them so I wonder how many people this affects.
+
+#increases are all much more than the temporary relief from covid
+
+#These numbers also don't match what TECO claims -- that they've gone up only 30% in the last 5 years. let's look at their average bill to see if this matches their estimates
+
+costs %>% 
+  filter(month == 6, state == "FL") %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer,
+         avg_bill = (res_rev_thousands*1000)/res_customers) %>% 
+  select(year, utility_name, avg_bill) %>%  
+  pivot_wider(names_from = year, values_from = avg_bill) %>% 
+  filter(!grepl("Adjustment", utility_name), !grepl("Total", utility_name)) %>% 
+  mutate(pct_pandemic = ((`2020`-`2019`)/`2019`)*100, #how much did companies drop their prices during crisis?
+         pct_change_5years = ((`2023`-`2019`)/`2019`)*100,
+         pct_change_2years = ((`2023`-`2021`)/`2022`)*100, #from when prices started rising again to now
+         pct_change_lastyear = ((`2023`-`2022`)/`2022`)*100) %>% 
+  select(utility_name, pct_pandemic, pct_change_5years, pct_change_2years, pct_change_lastyear) %>% 
+  arrange(desc(pct_change_2years))
+
+#Measuring from 2019 to the present (ish), the pct increase does go down for TECO. It's probably reasonable to expect that their projected 30% number for June 2024 is accurate. But it's still pretty arbitrary and doesn't change the fact that it went up a lot in between then.
+
+#What is the most expensive FL company?
+costs %>% 
+  filter(state == "FL", year == 2023) %>% #focus on 2023 for now
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  select(month, utility_name, cents_per_KWH) %>%  
+  filter(!grepl("Adjustment", utility_name), !grepl("Total", utility_name)) %>%
+  arrange(month, desc(cents_per_KWH))
+
+#Florida Public Utilities and Duke are pretty consistently more expensive than TECO -- and not by an insignificant amount. 
+
+```
+
+```{r}
+#Compare TECO to Alaska companies -- check on lawyer's tip that some months, the utility is charging comparable amounts to companies serving remote areas in Alaska
+
+costs %>% 
+  filter(state == "AK" | utility_name == "Tampa Electric Co") %>% 
+  filter(year == 2023) %>% 
+  filter(utility_name != "State Adjustment 2023") %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  select(month, utility_name, cents_per_KWH) %>% 
+  arrange(month, desc(cents_per_KWH))
+
+#TECO is pretty consistently more expensive than a couple Alaska companies -- Alaska Electric Light & Power Co. & Ketchikan Public Utilities. It typically falls about a cent behind Kodiak Electric Assn Inc and several cents behind other Alaskan power companies. I don't know what parts of Alaska these companies serve, so it's tough to say if this is unusual. 
+```
+
+```{r}
+#where does TECO fall around other companies in other states though?
+
+costs %>% 
+  filter(year == 2023) %>% 
+  filter(utility_name != "State Adjustment 2023") %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  select(month, state, utility_name, cents_per_KWH) %>% 
+  arrange(month, desc(cents_per_KWH)) #Immediately it's clear that there are companies in other states charging much, much more
+```
+
+```{r}
+
+#graph the prices for FLorida companies each month over the last few years -- focus on the big ones
+
+costs %>% 
+  filter(utility_name == "Tampa Electric Co" | utility_name == "Duke Energy Florida" | utility_name == "Florida Public Utilities Co" | utility_name == "Florida Power & Light Co") %>% 
+  filter(year == 2018 | year == 2019 | year == 2020 | year == 2021 | year == 2022 | year == 2023) %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>%
+  mutate(date = ymd(paste0(year,"-",month,"-","1"))) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  select(date, utility_name, cents_per_KWH) %>%  
+  ggplot(aes(x = date, y = cents_per_KWH, color = utility_name))+
+  geom_line()
+
+#Costs have clearly been rising the last 2 years at all, similar spikes in early 2023
+
+```
+
+```{r}
+#version of this looking at average bills
+
+costs %>% 
+  filter(utility_name == "Tampa Electric Co" | utility_name == "Duke Energy Florida" | utility_name == "Florida Power & Light Co") %>% 
+  filter(year == 2018 | year == 2019 | year == 2020 | year == 2021 | year == 2022 | year == 2023) %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>%
+  mutate(date = ymd(paste0(year,"-",month,"-","1"))) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer,
+         avg_bill = (res_rev_thousands*1000)/res_customers) %>% 
+  select(date, utility_name, avg_bill) %>%  
+  ggplot(aes(x = date, y = avg_bill, color = utility_name))+
+  geom_line()
+
+#I'm guessing this looks insane because it doesn't control for the different amounts of electricity used each month. It clearly spikes at the midpoint of each year (summer), with smaller bumps in the beginning/end (winter). Even with this variation, it's clear the prices have climbed since 2020.
+```
+
+
+```{r}
+#save a version of this for datawrapper
+
+cost_over_time <- costs %>% 
+  filter(utility_name == "Tampa Electric Co" | utility_name == "Duke Energy Florida" | utility_name == "Florida Public Utilities Co" | utility_name == "Florida Power & Light Co") %>% 
+  filter(year == 2018 | year == 2019 | year == 2020 | year == 2021 | year == 2022 | year == 2023) %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>%
+  mutate(date = ymd(paste0(year,"-",month,"-","1"))) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = (cents_per_customer/KWH_per_customer)/100) %>% #show as dollars 
+  select(date, utility_name, cents_per_KWH) %>%  
+  pivot_wider(names_from = utility_name, values_from = cents_per_KWH)
+
+write_csv(cost_over_time, "data/cost_over_time_companies.csv")
+
+```
+
+```{r}
+#Calculate customers' overall cost per month (just the crazy graph but in chart form)
+
+costs_dollars <- costs %>% 
+  filter(utility_name == "Tampa Electric Co" | utility_name == "Duke Energy Florida" | utility_name == "Florida Public Utilities Co" | utility_name == "Florida Power & Light Co") %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>%
+  mutate(date = ymd(paste0(year,"-",month,"-","1"))) %>% 
+  mutate(res_rev = (res_rev_thousands*1000)) %>% #keeping this in dollars
+  mutate(dollars_per_customer = (res_rev)/res_customers) %>% 
+  select(date, utility_name, dollars_per_customer) %>%
+  pivot_wider(names_from = utility_name, values_from = dollars_per_customer)
+
+
+```
+
+
+```{r}
+#closer look at the last two years
+
+costs %>% 
+  filter(utility_name == "Tampa Electric Co" | utility_name == "Duke Energy Florida" | utility_name == "Florida Public Utilities Co" | utility_name == "Florida Power & Light Co") %>% 
+  filter(year == 2022 | year == 2023) %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>%
+  mutate(date = ymd(paste0(year,"-",month,"-","1"))) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  select(date, utility_name, cents_per_KWH) %>%  
+  ggplot(aes(x = date, y = cents_per_KWH, color = utility_name))+
+  geom_line()
+```
+
+```{r}
+#graph annual percent increase
+
+annual_increases <- costs %>% 
+  filter(month == 12, state == "FL") %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  select(year, utility_name, cents_per_KWH) %>%  
+  pivot_wider(names_from = year, values_from = cents_per_KWH) %>% 
+  filter(!grepl("Adjustment", utility_name), !grepl("Total", utility_name)) %>% 
+  mutate(`2014-12-1` = ((`2014`-`2013`)/`2013`)*100, #annual % increase -- field name = last date of period
+         `2015-12-1` = ((`2015`-`2014`)/`2014`)*100,
+         `2016-12-1` = ((`2016`-`2015`)/`2015`)*100,
+         `2017-12-1` = ((`2017`-`2016`)/`2016`)*100,
+         `2018-12-1` = ((`2018`-`2017`)/`2017`)*100,
+         `2019-12-1` = ((`2019`-`2018`)/`2018`)*100,
+         `2020-12-1` = ((`2020`-`2019`)/`2019`)*100,
+         `2021-12-1` = ((`2021`-`2020`)/`2020`)*100,
+         `2022-12-1` = ((`2022`-`2021`)/`2021`)*100,
+         `2023-12-1` = ((`2023`-`2022`)/`2022`)*100) %>% 
+  head(6) %>% 
+  select(utility_name, `2014-12-1`, `2015-12-1`, `2016-12-1`, `2017-12-1`, `2018-12-1`, `2019-12-1`, `2020-12-1`, `2021-12-1`, `2022-12-1`, `2023-12-1`) %>% 
+  filter(utility_name == "Duke Energy Florida" | utility_name == "Florida Power & Light Co" | utility_name == "Florida Public Utilities Co" | utility_name == "Tampa Electric Co") 
+
+write_csv(annual_increases, "data/annual_company_increases.csv")
+
+annual_increases %>% 
+  pivot_longer(cols = c(`2014-12-1`, `2015-12-1`, `2016-12-1`, `2017-12-1`, `2018-12-1`, `2019-12-1`, `2020-12-1`, `2021-12-1`, `2022-12-1`, `2023-12-1`),
+               names_to = "date", #reconfigure df for graphing
+               values_to = "annual_pct_increase") %>% 
+  mutate(date = ymd(date)) %>% 
+  ggplot(aes(x = date, y = annual_pct_increase, color = utility_name))+
+  geom_line()
+
+
+```
+
+
+```{r}
+#How do these increases compare to natural gas price increases.
+##Also from EIA: https://www.eia.gov/dnav/ng/hist/rngwhhdm.htm
+
+gas <- read_csv("data/RNGWHHDm.csv") %>% clean_names()
+
+#fix dates
+
+gas <- gas %>% 
+  mutate(year = RIGHT(date, 4),
+         month = LEFT(date, 3),
+         month = recode(month,
+  Jan = 1,
+  Feb = 2,
+  Mar = 3,
+  Apr = 4,
+  May = 5,
+  Jun = 6,
+  Jul = 7,
+  Aug = 8,
+  Sep = 9,
+  Oct = 10,
+  Nov = 11,
+  Dec = 12
+),
+clean_date = as.Date(paste0(year,"-",month,"-","01"))) %>% 
+  rename("price_dollars_mil_btu" = henry_hub_natural_gas_spot_price_dollars_per_million_btu)
+
+```
+
+```{r}
+#compare annual increases for same time period as above, also focusing on December
+
+gas %>% 
+  filter(year >= 2013 & month == 12) %>% 
+  select(-c(date, year, month)) %>% 
+  pivot_wider(names_from = clean_date, values_from = price_dollars_mil_btu) %>% 
+  mutate(`2014-12-1` = ((`2014-12-01`-`2013-12-01`)/`2013-12-01`)*100, #annual % increase -- field name = last date of period
+         `2015-12-1` = ((`2015-12-01`-`2014-12-01`)/`2014-12-01`)*100,
+         `2016-12-1` = ((`2016-12-01`-`2015-12-01`)/`2015-12-01`)*100,
+         `2017-12-1` = ((`2017-12-01`-`2016-12-01`)/`2016-12-01`)*100,
+         `2018-12-1` = ((`2018-12-01`-`2017-12-01`)/`2017-12-01`)*100,
+         `2019-12-1` = ((`2019-12-01`-`2018-12-01`)/`2018-12-01`)*100,
+         `2020-12-1` = ((`2020-12-01`-`2019-12-01`)/`2019-12-01`)*100,
+         `2021-12-1` = ((`2021-12-01`-`2020-12-01`)/`2020-12-01`)*100,
+         `2022-12-1` = ((`2022-12-01`-`2021-12-01`)/`2021-12-01`)*100,
+         `2023-12-1` = ((`2023-12-01`-`2022-12-01`)/`2022-12-01`)*100) %>% 
+  pivot_longer(cols = c(`2014-12-1`, `2015-12-1`, `2016-12-1`, `2017-12-1`, `2018-12-1`, `2019-12-1`, `2020-12-1`, `2021-12-1`, `2022-12-1`, `2023-12-1`),
+               names_to = "date", #reconfigure df for graphing
+               values_to = "annual_pct_increase") %>% 
+  select(date, annual_pct_increase) %>% 
+  ggplot(aes(x = as.Date(date), y = annual_pct_increase)) +
+  geom_line()
+
+#Pattern of percent increases looks pretty similar to utility companies' actually
+```
+
+```{r}
+#Compare the actual prices. These are expressed in different units so while gas prices increased by much higher percentages, it's unclear how this translates to the utility prices.
+
+#Gas prices expressed as dollars per billion BTU
+#Utilities expressed as cents per KWH
+#1 kWh = 3412 Btu
+
+gas <- gas %>% 
+  mutate(cents_per_kwh = (price_dollars_mil_btu/1000000)*3412)
+
+#calculate amount of profit (what they're charging - cost to them per kwh) each month. Has the amount of profit gone up or down or stayed the same as their prices to customers changed?
+
+cost_over_time %>% 
+  left_join(gas, by = c("date" = "clean_date")) %>% 
+  mutate(teco_profit = `Tampa Electric Co`-cents_per_kwh,
+         fpl_profit = `Florida Power & Light Co`-cents_per_kwh,
+         duke_profit = `Duke Energy Florida`-cents_per_kwh) 
+
+#show in graph
+cost_over_time %>% 
+  left_join(gas, by = c("date" = "clean_date")) %>% 
+  mutate(teco_profit = `Tampa Electric Co`-cents_per_kwh,
+         fpl_profit = `Florida Power & Light Co`-cents_per_kwh,
+         duke_profit = `Duke Energy Florida`-cents_per_kwh) %>% 
+  pivot_longer(cols = c(teco_profit, fpl_profit, duke_profit),
+               names_to = "company",
+               values_to = "profit_cents_per_kwh") %>% 
+  select(date, company, profit_cents_per_kwh) %>% 
+  ggplot(aes(x = date, y = profit_cents_per_kwh, color = company)) + 
+  geom_line()
+
+```
+
+```{r}
+#Show prices companies are charging on same graph as gas prices to see if lines are following same shape?
+
+cost_over_time %>% 
+  left_join(select(gas, clean_date, cents_per_kwh), by = c("date" = "clean_date")) %>% 
+  rename("Natural Gas Cost" = cents_per_kwh) %>% 
+  pivot_longer(cols = c(`Florida Power & Light Co`, `Duke Energy Florida`, `Florida Public Utilities Co`, `Tampa Electric Co`, `Natural Gas Cost`),
+               names_to = "company",
+               values_to = "cost") %>% 
+  ggplot(aes(x = date, y = cost, color = company)) +
+  geom_line()
+
+#It is the same general shape, leveling out a bit during 2023. Only difference is more recently (end of 2023), TECO and Duke are going up, while natural gas is going down
+
+```
+
+```{r}
+#show monthly index
+
+gas %>% 
+  select(clean_date, price_dollars_mil_btu) %>% 
+  filter(clean_date > "2017-12-01") %>% 
+  mutate(index_gas = price_dollars_mil_btu/first(price_dollars_mil_btu)-1) %>% 
+  left_join(select(cost_over_time, date, `Tampa Electric Co`, `Duke Energy Florida`), by = c("clean_date" = "date")) %>% 
+  mutate(index_teco = `Tampa Electric Co`/first(`Tampa Electric Co`)-1,
+         index_duke = `Duke Energy Florida`/first(`Duke Energy Florida`)-1) %>% 
+  select(clean_date, index_gas, index_teco, index_duke) %>% 
+  pivot_longer(cols = c(index_gas, index_teco, index_duke), 
+               names_to = "company",
+               values_to = "index") %>% 
+  ggplot(aes(x = clean_date, y = index, color = company)) +
+  geom_line()
+```
+
+```{r}
+#same as above, but show annual index -- this would probably be more accurate, better to compare December to Decembers than June to Januarys, etc
+
+gas %>% 
+  filter(year > 2017 & month == 12) %>% 
+  select(clean_date, price_dollars_mil_btu) %>% 
+  mutate(index_gas = price_dollars_mil_btu/first(price_dollars_mil_btu)-1) %>% 
+  left_join(select(cost_over_time, date, `Tampa Electric Co`, `Duke Energy Florida`), by = c("clean_date" = "date")) %>% 
+  mutate(index_teco = `Tampa Electric Co`/first(`Tampa Electric Co`)-1,
+         index_duke = `Duke Energy Florida`/first(`Duke Energy Florida`)-1) %>% 
+  select(clean_date, index_gas, index_teco, index_duke) %>% 
+  pivot_longer(cols = c(index_gas, index_teco, index_duke), 
+               names_to = "company",
+               values_to = "index") %>% 
+  ggplot(aes(x = clean_date, y = index, color = company)) +
+  geom_line()
+
+#save a version of this for datawrapper
+
+index <- gas %>% 
+  filter(year > 2017 & month == 12) %>% 
+  select(clean_date, price_dollars_mil_btu) %>% 
+  mutate(index_gas = (price_dollars_mil_btu/first(price_dollars_mil_btu)-1)*100) %>% 
+  left_join(select(cost_over_time, date, `Tampa Electric Co`, `Duke Energy Florida`), by = c("clean_date" = "date")) %>% 
+  mutate(index_teco = (`Tampa Electric Co`/first(`Tampa Electric Co`)-1)*100,
+         index_duke = (`Duke Energy Florida`/first(`Duke Energy Florida`)-1)*100) %>% 
+  select(clean_date, index_gas, index_teco, index_duke)
+
+write_csv(index, "data/index.csv")
+```
+
+#Average bill -- not the same as cost per kwH
+```{r}
+
+#if this is useful -- calculate bill for customer using 1000 KWH, based on cents per KWH
+costs %>% 
+  filter(month == 12, year == 2023, utility_number == 88888) %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  mutate(bill_1000KWH = (cents_per_KWH*1000)/100) %>% 
+  arrange(desc(bill_1000KWH))
+#Florida comes in 21st
+
+#average cost for December 2023
+costs %>% 
+  filter(month == 12, year == 2023, utility_number == 88888) %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  mutate(avg_bill = ((res_rev_thousands)*1000)/res_customers) %>% 
+  arrange(desc(avg_bill))
+
+
+```
+
+```{r}
+#average cost for entire year per state - narrow down to see top 5 in 2023 and how they changed
+
+top_states_avg <- costs %>% 
+  filter(utility_number == 88888) %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  mutate(avg_bill = ((res_rev_thousands)*1000)/res_customers) %>% 
+  group_by(year, state) %>% 
+  summarise(mean_bill = mean(avg_bill)) %>% 
+  arrange(year, desc(mean_bill)) %>% 
+  filter(state == "HI" | state == "CT" | state == "NH" | state == "FL" | state == "ME") %>% 
+  pivot_wider(names_from = year,
+              values_from = mean_bill)
+
+write_csv(top_states_avg, "data/top_states_avg.csv")
+```
+
+```{r}
+#does median make a difference? -- slightly, but not by much
+
+costs %>% 
+  filter(year == 2023, utility_number == 88888) %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  mutate(avg_bill = ((res_rev_thousands)*1000)/res_customers) %>% 
+  group_by(state) %>% 
+  summarise(median_bill = median(avg_bill)) %>% 
+  arrange(desc(median_bill))
+```
+
+```{r}
+#Graph change in average bill over the years -- which states have highest percent change?
+
+state_bill_increases <- costs %>% 
+  filter(utility_number == 88888) %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  mutate(avg_bill = ((res_rev_thousands)*1000)/res_customers) %>% 
+  group_by(state, year) %>% 
+  summarise(mean_bill = mean(avg_bill)) %>% 
+  arrange(year, desc(mean_bill)) %>% 
+  pivot_wider(names_from = year,
+              values_from = mean_bill) %>% 
+  mutate(pandemic_change = ((`2023`-`2020`)/`2020`)*100, 
+         change1 = ((`2014`-`2013`)/`2013`)*100,
+         change2 = ((`2015`-`2014`)/`2014`)*100,
+         change3 = ((`2016`-`2015`)/`2015`)*100,
+         change4 = ((`2017`-`2016`)/`2016`)*100,
+         change5 = ((`2018`-`2017`)/`2017`)*100,
+         change6 = ((`2019`-`2018`)/`2018`)*100,
+         change7 = ((`2020`-`2019`)/`2019`)*100,
+         change8 = ((`2021`-`2020`)/`2020`)*100,
+         change9 = ((`2022`-`2021`)/`2021`)*100,
+         change10 = ((`2023`-`2022`)/`2022`)*100) %>% 
+  arrange(desc(change9)) %>% 
+  select(state, change1, change2, change3, change4, change5, change6, change7, change8, change9, change10, pandemic_change) %>% 
+  head(10)
+
+write_csv(state_bill_increases, "data/state_bill_increases.csv")
+
+#Overall, Florida's average utility bills increased 30% from 2020 to 2023 -- the fifth highest increase of any state in the nation.*** 
+
+```
+
+```{r}
+#indexed version
+index_avg_bills <- costs %>% 
+  filter(utility_number == 88888) %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  mutate(avg_bill = ((res_rev_thousands)*1000)/res_customers) %>% 
+  group_by(state, year) %>% 
+  summarise(mean_bill = mean(avg_bill)) %>% 
+  arrange(year, desc(mean_bill)) %>% 
+  pivot_wider(names_from = year,
+              values_from = mean_bill) %>% 
+  select(`2018`, `2019`, `2020`, `2021`, `2022`, `2023`) %>% 
+  mutate(pandemic_change = ((`2023`-`2020`)/`2020`)*100) %>% 
+  arrange(desc(pandemic_change)) %>% 
+  select(-pandemic_change) %>% 
+  head(10) %>% 
+  t()
+
+index_avg_bills <- as.data.frame(index_avg_bills) %>% 
+    row_to_names(row_number = 1) %>% 
+  clean_names()
+
+index_avg_bills$me <- as.numeric(index_avg_bills$me)
+index_avg_bills$nh <- as.numeric(index_avg_bills$nh)
+index_avg_bills$nv <- as.numeric(index_avg_bills$nv)
+index_avg_bills$hi <- as.numeric(index_avg_bills$hi)
+index_avg_bills$fl <- as.numeric(index_avg_bills$fl)
+index_avg_bills$ct <- as.numeric(index_avg_bills$ct)
+index_avg_bills$pa <- as.numeric(index_avg_bills$pa)
+index_avg_bills$ma <- as.numeric(index_avg_bills$ma)
+index_avg_bills$tx <- as.numeric(index_avg_bills$tx)
+index_avg_bills$ms <- as.numeric(index_avg_bills$ms)
+
+
+index_avg_bills <- index_avg_bills %>% 
+  mutate(index_me = me/first(me)-1,
+         index_nh = nh/first(nh)-1,
+         index_nv = nv/first(nv)-1,
+         index_hi = hi/first(hi)-1,
+         index_fl = fl/first(fl)-1,
+         index_ct = ct/first(ct)-1,
+         index_pa = pa/first(pa)-1,
+         index_ma = ma/first(ma)-1,
+         index_tx = tx/first(tx)-1,
+         index_ms = ms/first(ms)-1) %>% 
+  select(index_me, index_nh, index_nv, index_hi, index_fl, index_ct, index_pa, index_ma, index_ma, index_tx, index_ms)
+
+write_csv(index_avg_bills, "data/index_avg_bills.csv")
+
+  
+```
+
+
+```{r}
+#Same as above but look at change in average for individual companies -- hopefully will be comparable to what we saw looking at individual months
+
+costs %>% 
+  filter(state == "FL") %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  mutate(avg_bill = ((res_rev_thousands)*1000)/res_customers) %>% 
+  group_by(utility_name, year) %>% 
+  summarise(mean_bill = mean(avg_bill)) %>% 
+  arrange(year, desc(mean_bill)) %>% 
+  pivot_wider(names_from = year,
+              values_from = mean_bill) %>% 
+  mutate(pandemic_change1 = ((`2020`-`2019`)/`2019`)*100,
+         pandemic_change2 = ((`2021`-`2020`)/`2020`)*100,
+         fiveyear_change = ((`2023`-`2019`)/`2019`)*100) %>% 
+  arrange(desc(fiveyear_change))
+
+#Same but try out specific months, just to be safe
+
+costs %>% 
+  filter(state == "FL" & month == 7) %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  mutate(avg_bill = ((res_rev_thousands)*1000)/res_customers) %>% 
+  select(utility_name, year, avg_bill) %>% 
+  pivot_wider(names_from = year,
+              values_from = avg_bill) %>% 
+  mutate(pandemic_change1 = ((`2020`-`2019`)/`2019`)*100,
+         pandemic_change2 = ((`2021`-`2020`)/`2020`)*100,
+         fiveyear_change = ((`2023`-`2019`)/`2019`)*100) %>% 
+  arrange(desc(fiveyear_change))
+
+#TECO's June increase is much lower than their December increase -- makes it tough to decide what month is the best touchpoint -- averaging out the year is probably the only way to go
+```
+
+```{r}
+#doing this method with cents per kwh -- does it make a difference?
+costs %>% 
+  filter(utility_number == 88888) %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  group_by(state, year) %>% 
+  summarise(mean_cost = mean(cents_per_KWH)) %>% 
+  arrange(year, desc(mean_cost)) %>% 
+  pivot_wider(names_from = year,
+              values_from = mean_cost) %>% 
+  mutate(pandemic_change = ((`2023`-`2020`)/`2020`)*100,
+         change1 = ((`2014`-`2013`)/`2013`)*100,
+         change2 = ((`2015`-`2014`)/`2014`)*100,
+         change3 = ((`2016`-`2015`)/`2015`)*100,
+         change4 = ((`2017`-`2016`)/`2016`)*100,
+         change5 = ((`2018`-`2017`)/`2017`)*100,
+         change6 = ((`2019`-`2018`)/`2018`)*100,
+         change7 = ((`2020`-`2019`)/`2019`)*100,
+         change8 = ((`2021`-`2020`)/`2020`)*100,
+         change9 = ((`2022`-`2021`)/`2021`)*100,
+         change10 = ((`2023`-`2022`)/`2022`)*100) %>% 
+  select(state, change1, change2, change3, change4, change5, change6, change7, change8, change9, change10, pandemic_change) %>% 
+  arrange(desc(pandemic_change))
+```
+
+```{r}
+#How do TECO and Duke compare to companies in other states?
+costs %>% 
+  filter(utility_number != 88888 & !grepl("State Adjustment", utility_name)) %>% 
+  select(year, state, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  mutate(avg_bill = ((res_rev_thousands)*1000)/res_customers) %>% 
+  group_by(utility_name, state, year) %>% 
+  summarise(mean_bill = mean(avg_bill)) %>% 
+  arrange(year, desc(mean_bill)) %>% 
+  pivot_wider(names_from = year,
+              values_from = mean_bill) %>% 
+  mutate(pandemic_change = ((`2023`-`2020`)/`2020`)*100) %>% 
+  arrange(desc(`2023`)) %>% 
+  filter(grepl("Tampa", utility_name))
+
+#TECO has the 8th highest pandemic increase
+```
+```{r}
+costs %>% 
+  filter(utility_number != 88888) %>% 
+  select(year, state, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  mutate(avg_bill = ((res_rev_thousands)*1000)/res_customers) %>% 
+  group_by(utility_name, state, year) %>% 
+  summarise(mean_cost = mean(cents_per_KWH)) %>% 
+  arrange(year, desc(mean_cost)) %>% 
+  pivot_wider(names_from = year,
+              values_from = mean_cost) %>% 
+  mutate(pandemic_change = ((`2023`-`2020`)/`2020`)*100) %>% 
+  arrange(desc(`2023`))
+```
+
+```{r}
+#different version of annual increases looking at annual average and including state average
+
+annual_increases <- costs %>% 
+  filter(utility_name == "Duke Energy Florida" | utility_name == "Florida Power & Light Co" | utility_name == "Florida Public Utilities Co" | utility_name == "Tampa Electric Co" | utility_number == 88888 & state == "FL") %>%
+  mutate(utility_name = if_else(utility_name == "Total EPM", "State Total", utility_name)) %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  select(year, utility_name, cents_per_KWH) %>%  
+  group_by(utility_name, year) %>% 
+  summarise(mean_cost = mean(cents_per_KWH)) %>% 
+  pivot_wider(names_from = year, values_from = mean_cost) %>% 
+  mutate(`2014change` = ((`2014`-`2013`)/`2013`)*100, #annual % increase -- field name = last date of period
+         `2015change` = ((`2015`-`2014`)/`2014`)*100,
+         `2016change` = ((`2016`-`2015`)/`2015`)*100,
+         `2017change` = ((`2017`-`2016`)/`2016`)*100,
+         `2018change` = ((`2018`-`2017`)/`2017`)*100,
+         `2019change` = ((`2019`-`2018`)/`2018`)*100,
+         `2020change` = ((`2020`-`2019`)/`2019`)*100,
+         `2021change` = ((`2021`-`2020`)/`2020`)*100,
+         `2022change` = ((`2022`-`2021`)/`2021`)*100,
+         `2023change` = ((`2023`-`2022`)/`2022`)*100) %>% 
+  select(utility_name, `2014change`, `2015change`, `2016change`, `2017change`, `2018change`, `2019change`, `2020change`, `2021change`, `2022change`, `2023change`) 
+
+write_csv(annual_increases, "data/annual_company_increases.csv")
+
+```
+
+```{r}
+#How do TECO and Duke compare to other companies in average bills? Filter companies with 100k+ customers
+
+costs %>%
+  filter(utility_number != 88888 & !grepl("Adjustment", utility_name)) %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  filter(res_customers > 100000) %>% 
+  count(utility_name) #out of how many utilities are we talking about?
+
+avg_bill_per_utility <- costs %>%
+  filter(utility_number != 88888 & !grepl("Adjustment", utility_name)) %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  filter(res_customers > 100000) %>% 
+  mutate(avg_bill = (res_rev_thousands*1000)/res_customers) %>% 
+  group_by(utility_name, year) %>% 
+  summarise(mean_bill = mean(avg_bill)) %>% 
+  arrange(year, desc(mean_bill)) %>% 
+  pivot_wider(names_from = year,
+              values_from = mean_bill) %>% 
+  select(`2018`, `2019`, `2020`, `2021`, `2022`, `2023`) %>% 
+  filter(!is.na(`2023`)) %>% 
+  arrange(desc(`2023`))
+
+write_csv(avg_bill_per_utility, "data/avg_bill_per_utility.csv")
+```
+

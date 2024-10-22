@@ -1,0 +1,245 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(readxl)
+library(ExcelFunctionsR)
+library(lubridate)
+library(tidycensus)
+library(sf)
+library(mapview)
+library(RColorBrewer)
+```
+
+
+```{r}
+#data pulled from: https://www.eia.gov/electricity/data/eia861m/ -- each year downloaded seperately from Sales & Revenue tab, then names cleaned in Excel before importing herecosts2013 <- read_excel("data/f8262013.xls") %>% clean_names()
+
+costs2013 <- read_excel("data/f8262013.xls") %>% clean_names()
+costs2013$res_rev_thousands <- as.numeric(costs2013$res_rev_thousands)
+costs2013$res_sales_megawatthours <- as.numeric(costs2013$res_sales_megawatthours)
+costs2013$res_customers <- as.numeric(costs2013$res_customers)
+costs2013$commercial_rev <- as.numeric(costs2013$commercial_rev)
+costs2013$commercial_sales <- as.numeric(costs2013$commercial_sales)
+costs2013$commercial_customers <- as.numeric(costs2013$commercial_customers)
+costs2013$ind_rev <- as.numeric(costs2013$ind_rev)
+costs2013$ind_sales <- as.numeric(costs2013$ind_sales)
+
+costs2014 <- read_excel("data/f8262014.xls") %>% clean_names()
+costs2014$transpo_rev <- as.numeric(costs2014$transpo_rev)
+costs2014$transpo_sales <- as.numeric(costs2014$transpo_sales)
+costs2014$transpo_customers <- as.numeric(costs2014$transpo_customers)
+
+costs2015 <- read_excel("data/f8262015.xls") %>% clean_names()
+costs2015$ind_rev <- as.numeric(costs2015$ind_rev)
+costs2015$ind_sales <- as.numeric(costs2015$ind_sales)
+costs2015$ind_customers <- as.numeric(costs2015$ind_customers)
+
+costs2016 <- read_excel("data/f8262016.xls") %>% clean_names()
+
+costs2017 <- read_excel("data/retail_sales_2017.xlsx") %>% clean_names()
+
+costs2018 <- read_excel("data/retail_sales_2018.xlsx") %>% clean_names()
+costs2018$commercial_customers <- as.numeric(costs2018$commercial_customers)
+costs2018$ind_rev <- as.numeric(costs2018$ind_rev)
+costs2018$ind_sales <- as.numeric(costs2018$ind_sales)
+costs2018$ind_customers <- as.numeric(costs2018$ind_customers)
+costs2018$transpo_rev <- as.numeric(costs2018$transpo_rev)
+costs2018$transpo_sales <- as.numeric(costs2018$transpo_sales)
+costs2018$transpo_customers <- as.numeric(costs2018$transpo_customers)
+
+costs2019 <- read_excel("data/retail_sales_2019.xlsx") %>% clean_names()
+costs2019$transpo_sales <- as.numeric(costs2019$transpo_sales)
+costs2019$transpo_customers <- as.numeric(costs2019$transpo_customers)
+
+costs2020 <- read_excel("data/retail_sales_2020.xlsx") %>% clean_names()
+costs2020$res_rev_thousands <- as.numeric(costs2020$res_rev_thousands)
+costs2020$res_sales_megawatthours <- as.numeric(costs2020$res_sales_megawatthours)
+costs2020$res_customers <- as.numeric(costs2020$res_customers)
+costs2020$commercial_rev <- as.numeric(costs2020$commercial_rev)
+costs2020$commercial_sales <- as.numeric(costs2020$commercial_sales)
+costs2020$commercial_customers <- as.numeric(costs2020$commercial_customers)
+costs2020$ind_rev <- as.numeric(costs2020$ind_rev)
+costs2020$ind_sales <- as.numeric(costs2020$ind_sales)
+costs2020$ind_customers <- as.numeric(costs2020$ind_customers)
+costs2020$transpo_rev <- as.numeric(costs2020$transpo_rev)
+costs2020$transpo_sales <- as.numeric(costs2020$transpo_sales)
+costs2020$transpo_customers <- as.numeric(costs2020$transpo_customers)
+
+costs2021 <- read_excel("data/sales_ult_cust_2021.xlsx") %>% clean_names()
+costs2021$ind_sales <- as.numeric(costs2021$ind_sales)
+
+costs2022 <- read_excel("data/sales_ult_cust_2022.xlsx") %>% clean_names()
+costs2022$res_rev_thousands <- as.numeric(costs2022$res_rev_thousands)
+costs2022$res_sales_megawatthours <- as.numeric(costs2022$res_sales_megawatthours)
+costs2022$res_customers <- as.numeric(costs2022$res_customers)
+costs2022$ind_rev <- as.numeric(costs2022$ind_rev)
+costs2022$ind_sales <- as.numeric(costs2022$ind_sales)
+
+costs2023 <- read_excel("data/sales_ult_cust_2023.xlsx") %>% clean_names()
+
+#bind
+costs <- bind_rows(costs2013, costs2014, costs2015, costs2016, costs2017, costs2018, costs2019, costs2020, costs2021, costs2022, costs2023)
+
+rm(costs2013, costs2014, costs2015, costs2016, costs2017, costs2018, costs2019, costs2020, costs2021, costs2022, costs2023)
+
+#fix Duke Energy issue
+
+costs$utility_name <- gsub("Duke Energy Florida, Inc", "Duke Energy Florida", costs$utility_name)
+costs$utility_name <- gsub("Duke Energy Florida, LLC", "Duke Energy Florida", costs$utility_name)
+```
+
+```{r}
+#"In recent years, Floridians experienced a monumental spike in costs, according to a Tampa Bay Times analysis of data from the U.S. Energy Information Administration. From 2021 to 2022, energy prices in the state jumped about 17%, and continued to climb in 2023."
+
+#have to convert everything to cents per kilowatthour, which is how it's expressed in this report:  https://www.eia.gov/electricity/monthly/epm_table_grapher.php?t=table_5_06_a
+
+
+costs %>% 
+  filter(utility_name == "Duke Energy Florida" | utility_name == "Florida Power & Light Co" | utility_name == "Tampa Electric Co" | utility_number == 88888 & state == "FL") %>%
+  mutate(utility_name = if_else(utility_name == "Total EPM", "State Total", utility_name)) %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(res_rev_cents = (res_rev_thousands*1000)*100) %>% #trillions of cents
+  mutate(kwh = res_sales_megawatthours*1000) %>%  #1 mwh = 1000 kwh
+  mutate(cents_per_customer = (res_rev_cents)/res_customers,
+         KWH_per_customer = kwh/res_customers, #per month
+         cents_per_KWH = cents_per_customer/KWH_per_customer) %>% 
+  select(year, utility_name, cents_per_KWH) %>%  
+  group_by(utility_name, year) %>% 
+  summarise(mean_cost = mean(cents_per_KWH)) %>% 
+  pivot_wider(names_from = year, values_from = mean_cost) %>% 
+  mutate(`2014change` = ((`2014`-`2013`)/`2013`)*100, #annual % increase -- field name = last date of time period
+         `2015change` = ((`2015`-`2014`)/`2014`)*100,
+         `2016change` = ((`2016`-`2015`)/`2015`)*100,
+         `2017change` = ((`2017`-`2016`)/`2016`)*100,
+         `2018change` = ((`2018`-`2017`)/`2017`)*100,
+         `2019change` = ((`2019`-`2018`)/`2018`)*100,
+         `2020change` = ((`2020`-`2019`)/`2019`)*100,
+         `2021change` = ((`2021`-`2020`)/`2020`)*100,
+         `2022change` = ((`2022`-`2021`)/`2021`)*100,
+         `2023change` = ((`2023`-`2022`)/`2022`)*100) %>% 
+  select(utility_name, `2014change`, `2015change`, `2016change`, `2017change`, `2018change`, `2019change`, `2020change`, `2021change`, `2022change`, `2023change`)
+```
+
+```{r}
+#"Florida’s energy bills are the fourth highest in the nation, the Times found, at an average of about $168 a month."
+
+costs %>% 
+  filter(utility_number == 88888) %>%
+  mutate(utility_name = if_else(utility_name == "Total EPM", "State Total", utility_name)) %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(avg_bill = (res_rev_thousands*1000)/res_customers) %>% 
+  group_by(state, year) %>% 
+  summarise(mean_bill = mean(avg_bill)) %>% 
+  arrange(year, desc(mean_bill)) %>% 
+  pivot_wider(names_from = year,
+              values_from = mean_bill) %>% 
+  select(`2018`, `2019`, `2020`, `2021`, `2022`, `2023`) %>% 
+  arrange(desc(`2023`))
+
+#Compared to 11th a decade ago
+
+costs %>% 
+  filter(utility_number == 88888) %>%
+  mutate(utility_name = if_else(utility_name == "Total EPM", "State Total", utility_name)) %>% 
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(avg_bill = (res_rev_thousands*1000)/res_customers) %>% 
+  group_by(state, year) %>% 
+  summarise(mean_bill = mean(avg_bill)) %>% 
+  arrange(year, desc(mean_bill)) %>% 
+  pivot_wider(names_from = year,
+              values_from = mean_bill) %>% 
+  arrange(desc(`2013`))
+
+```
+
+```{r}
+#"From 2019 to 2023, the average Tampa Electric bill went up 51%, while the average Duke Energy bill went up 28%, Times analysis of federal data shows."
+
+#goal here is to show how much more customers are paying -- not just reflective of the actual rates companies are charging
+
+costs %>% 
+  filter(utility_name == "Tampa Electric Co" | utility_name == "Duke Energy Florida") %>%
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(avg_bill = (res_rev_thousands*1000)/res_customers) %>% 
+  group_by(utility_name, year) %>% 
+  summarise(mean_bill = mean(avg_bill)) %>% 
+  arrange(year, desc(mean_bill)) %>% 
+  pivot_wider(names_from = year,
+              values_from = mean_bill) %>% 
+  mutate(pandemic_to_now = ((`2023`-`2019`)/`2019`)*100,
+         change_5year = ((`2023`-`2018`)/`2018`)*100)
+
+```
+
+```{r}
+#Cherie Jacobs, a Tampa Electric spokesperson, noted the utility company temporarily reduced prices during the pandemic in 2020. But in subsequent years, data shows prices rose to unprecedented levels, and quickly. From 2020 to 2021, the average TECO bill went up about 11%.
+
+costs %>% 
+  filter(utility_name == "Tampa Electric Co") %>%
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(avg_bill = (res_rev_thousands*1000)/res_customers) %>% 
+  group_by(utility_name, year) %>% 
+  summarise(mean_bill = mean(avg_bill)) %>% 
+  arrange(year, desc(mean_bill)) %>% 
+  pivot_wider(names_from = year,
+              values_from = mean_bill) %>% 
+  mutate(change19_20 = ((`2020`-`2019`)/`2019`)*100,
+         change20_21 = ((`2021`-`2020`)/`2020`)*100)
+```
+```{r}
+costs %>% 
+  filter(utility_name == "Tampa Electric Co") %>%
+  select(year, month, utility_name, state, res_rev_thousands, res_sales_megawatthours, res_customers) %>% 
+  mutate(avg_bill = (res_rev_thousands*1000)/res_customers) %>% 
+  group_by(utility_name, year) %>% 
+  summarise(mean_bill = mean(avg_bill)) %>% 
+  arrange(year, desc(mean_bill)) %>% 
+  pivot_wider(names_from = year,
+              values_from = mean_bill) %>% 
+  mutate(`2014change` = ((`2014`-`2013`)/`2013`)*100, #annual % increase -- field name = last date of period
+         `2015change` = ((`2015`-`2014`)/`2014`)*100,
+         `2016change` = ((`2016`-`2015`)/`2015`)*100,
+         `2017change` = ((`2017`-`2016`)/`2016`)*100,
+         `2018change` = ((`2018`-`2017`)/`2017`)*100,
+         `2019change` = ((`2019`-`2018`)/`2018`)*100,
+         `2020change` = ((`2020`-`2019`)/`2019`)*100,
+         `2021change` = ((`2021`-`2020`)/`2020`)*100,
+         `2022change` = ((`2022`-`2021`)/`2021`)*100,
+         `2023change` = ((`2023`-`2022`)/`2022`)*100) %>% 
+  select(utility_name, `2014change`, `2015change`, `2016change`, `2017change`, `2018change`, `2019change`, `2020change`, `2021change`, `2022change`, `2023change`) 
+```
+
+
+```{r}
+install.packages("blscrapeR")
+library(blscrapeR)
+chart <- read_excel("data/inflationadj_energy.xlsx")
+
+```
+
+```{r}
+values <- inflation_adjust(base_date = "2018-01-01")
+
+
+fpl %>% 
+  left_join(select(values, date, value), by = "date") %>% 
+  mutate(adjusted = amount*(308.742/value))
+
+```
+
+```{r}
+chart <- chart %>% 
+  left_join(select(values, date, value), by = "date") %>% 
+  mutate(fpl_adjusted = `Florida Power & Light Co`*(308.742/value),
+         duke_adjusted = `Duke Energy Florida`*(308.742/value),
+         teco_adjusted = `Tampa Electric Co`*(308.742/value))
+
+write_csv(chart, "data/inflation_adjusted_chart.csv")
+```
+
